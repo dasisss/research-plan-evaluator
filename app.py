@@ -227,11 +227,33 @@ def evaluate_heuristic(text):
     return rows
 
 
-def api_config():
-    api_key = get_secret("OPENAI_API_KEY")
-    model = get_secret("OPENAI_MODEL", "gpt-4.1-mini")
-    base_url = get_secret("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    return api_key, model, base_url
+def get_provider_config(provider):
+    if provider == "OpenAI":
+        return (
+            get_secret("OPENAI_API_KEY"),
+            get_secret("OPENAI_MODEL", "gpt-4.1-mini"),
+            "https://api.openai.com/v1"
+        )
+
+    if provider == "Gemini":
+        return (
+            get_secret("GEMINI_API_KEY"),
+            get_secret("GEMINI_MODEL", "gemini-3.7-flash"),
+            ""
+        )
+
+    if provider == "Claude":
+        return (
+            get_secret("ANTHROPIC_API_KEY"),
+            get_secret("ANTHROPIC_MODEL", "claude-sonnet-5"),
+            ""
+        )
+
+    return (
+        get_secret("CUSTOM_API_KEY"),
+        get_secret("CUSTOM_API_MODEL", ""),
+        get_secret("CUSTOM_API_BASE_URL", "")
+    )
 
 
 def parse_json_response(content):
@@ -247,58 +269,81 @@ def parse_json_response(content):
         raise
 
 
-def evaluate_ai(text, api_key, model, base_url):
-    import requests
+def build_evaluation_prompt(text):
+    criteria_text = "\n".join(
+        f"{n}. [{cat}] {c}" for n, cat, c in CRITERIA
+    )
 
-    criteria_text = "\n".join(f"{n}. [{cat}] {c}" for n, cat, c in CRITERIA)
     title = find_title(text)
-    intro = section_excerpt(text, ["المقدمة", "مقدمة", "تمهيد"], 10000)
-    # نرسل النص الكامل ضمن سقف معقول، مع إبراز العنوان والمقدمة لتقوية الحكم على بداية الخطة.
+    intro = section_excerpt(
+        text,
+        ["المقدمة", "مقدمة", "تمهيد"],
+        10000
+    )
+
     full_text = text[:65000]
 
-    prompt = f"""
-أنت محكّم أكاديمي متخصص في مناهج البحث العلمي، وتعمل على تقييم خطة بحث عربية.
+    return f"""
+أنت محكّم أكاديمي متخصص في مناهج البحث العلمي،
+وتعمل على تقييم خطة بحث عربية.
 
-مهمتك الأساسية ليست إعطاء أرقام فقط، بل كتابة تحليل أكاديمي تفسيري واضح يمكن للباحث الاستفادة منه في إعادة صياغة خطته.
+مهمتك الأساسية ليست إعطاء أرقام فقط، بل كتابة تحليل
+أكاديمي تفسيري واضح يمكن للباحث الاستفادة منه في
+إعادة صياغة خطته.
 
-قيّم الخطة حصراً وفق المعايير 12–51 و68–71 المدرجة أدناه. ممنوع تقييم أو احتساب أي معيار خارج هذه القائمة.
+قيّم الخطة حصراً وفق المعايير 12–51 و68–71 المدرجة أدناه.
+ممنوع تقييم أو احتساب أي معيار خارج هذه القائمة.
 
 مقياس كل معيار:
+
 0 = غير متحقق
 1 = متحقق جزئياً
 2 = متحقق بوضوح
 
 لكل معيار أعد:
+
 - score: 0 أو 1 أو 2
 - status: غير متحقق / متحقق جزئياً / متحقق
-- evidence: دليل موجز من النص المرفوع نفسه، أو "لا يوجد دليل كافٍ في النص"
-- explanation: تحليل يشرح لماذا استحق النص هذه الدرجة، وليس مجرد إعادة صياغة المعيار
+- evidence: دليل موجز من النص المرفوع نفسه، أو
+  "لا يوجد دليل كافٍ في النص"
+- explanation: تحليل يشرح لماذا استحق النص هذه الدرجة،
+  وليس مجرد إعادة صياغة المعيار
 - suggestion: اقتراح عملي ومحدد للتحسين إذا كانت الدرجة أقل من 2
 
-ثم اكتب overall_analysis في فقرات عربية مترابطة، ويجب أن يتضمن:
+ثم اكتب overall_analysis في فقرات عربية مترابطة،
+ويجب أن يتضمن:
+
 1. الحكم العام على مستوى الخطة ضمن المعايير المحددة.
-2. تحليلاً مستقلاً للعنوان: الوضوح، الاختصار، التحديد، الموضوع الرئيس، المتغيرات، والغموض.
-3. تحليلاً مستقلاً للمقدمة: الانتقال من العام إلى الخاص، عرض فكرة البحث والموضوع والعوامل المرتبطة، التوازن بين الإسهاب والإيجاز، ووضوح شخصية الباحث.
-4. تحليلاً لمشكلة الدراسة ومبرراتها ومصادر الوصول إليها وصياغة نهايتها.
+2. تحليلاً مستقلاً للعنوان: الوضوح، الاختصار، التحديد،
+   الموضوع الرئيس، المتغيرات، والغموض.
+3. تحليلاً مستقلاً للمقدمة: الانتقال من العام إلى الخاص،
+   عرض فكرة البحث والموضوع والعوامل المرتبطة، والتوازن
+   بين الإسهاب والإيجاز، ووضوح شخصية الباحث.
+4. تحليلاً لمشكلة الدراسة ومبرراتها ومصادر الوصول إليها
+   وصياغة نهايتها.
 5. تحليلاً للتساؤلات والفروض ومدى ترابطها.
-6. تحليلاً للأهمية والأهداف ومدى الاتساق بينهما وبين مشكلة الدراسة.
+6. تحليلاً للأهمية والأهداف ومدى الاتساق بينها وبين
+   مشكلة الدراسة.
 7. تحليلاً للمصطلحات والحدود والمنهج.
-8. تحليلاً للترابط العام، والتنسيق، وشخصية الباحث، والسلامة الإملائية والنحوية.
+8. تحليلاً للترابط العام، والتنسيق، وشخصية الباحث،
+   والسلامة الإملائية والنحوية.
 9. نقاط القوة.
 10. نقاط الضعف.
 11. توصيات عملية مرتبة من الأكثر أهمية إلى الأقل أهمية.
 
 قواعد صارمة:
+
 - لا تحكم من وجود كلمة واحدة فقط؛ افهم السياق والمعنى والترابط.
 - لا تخترع معلومات غير موجودة في الخطة.
 - لا تنسب للباحث فكرة لا تظهر في النص.
-- لا تعط درجة 2 لمجرد وجود عنوان فرعي؛ يجب أن يكون المضمون مستوفياً للمعيار.
+- لا تعط درجة 2 لمجرد وجود عنوان فرعي؛ يجب أن يكون
+  المضمون مستوفياً للمعيار.
 - عند غياب الدليل، قل صراحة إنه غير ظاهر في النص.
 - لا تجعل التحليل الكتابي مجرد تلخيص للدرجات.
 - لا تستخدم عبارات عامة مثل "الخطة جيدة" دون تفسير.
 - اكتب بالعربية الأكاديمية الواضحة.
 
-العنوان المستخرج آلياً (قد يحتاج إلى تصحيح من النص):
+العنوان المستخرج آلياً:
 {title}
 
 المقدمة المستخرجة آلياً إن أمكن:
@@ -311,6 +356,7 @@ def evaluate_ai(text, api_key, model, base_url):
 {full_text}
 
 أعد JSON فقط بهذا الشكل:
+
 {{
   "overall_analysis": "تحليل أكاديمي متعدد الفقرات، غني بالتفسير، وليس قائمة درجات فقط.",
   "results": [
@@ -326,43 +372,298 @@ def evaluate_ai(text, api_key, model, base_url):
 }}
 """
 
-    url = base_url.rstrip("/") + "/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "أجب بالعربية وبموضوعية. أعد JSON صالحاً فقط دون Markdown."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.1,
-    }
-    response = requests.post(url, headers=headers, json=body, timeout=300)
-    response.raise_for_status()
-    data = response.json()
-    content = data["choices"][0]["message"]["content"]
-    parsed = parse_json_response(content)
 
-    by_id = {int(x["id"]): x for x in parsed.get("results", []) if str(x.get("id", "")).isdigit()}
+def normalize_ai_result(parsed):
+    by_id = {
+        int(x["id"]): x
+        for x in parsed.get("results", [])
+        if str(x.get("id", "")).isdigit()
+    }
+
     rows = []
+
     for n, cat, criterion in CRITERIA:
         item = by_id.get(n, {})
+
         try:
             score = int(item.get("score", 0))
         except Exception:
             score = 0
+
         score = max(0, min(2, score))
+
         rows.append({
             "id": n,
             "category": cat,
             "criterion": criterion,
             "score": score,
-            "status": item.get("status", ["غير متحقق", "متحقق جزئياً", "متحقق"][score]),
-            "evidence": item.get("evidence", "لا يوجد دليل كافٍ في النص"),
+            "status": item.get(
+                "status",
+                ["غير متحقق", "متحقق جزئياً", "متحقق"][score]
+            ),
+            "evidence": item.get(
+                "evidence",
+                "لا يوجد دليل كافٍ في النص"
+            ),
             "explanation": item.get("explanation", ""),
             "suggestion": item.get("suggestion", ""),
         })
+
     return rows, parsed.get("overall_analysis", "").strip()
 
+
+def evaluate_openai(text, api_key, model):
+    import requests
+
+    prompt = build_evaluation_prompt(text)
+
+    url = "https://api.openai.com/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "أجب بالعربية وبموضوعية. "
+                    "أعد JSON صالحاً فقط دون Markdown."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 0.1,
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        json=body,
+        timeout=300,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
+
+    return normalize_ai_result(
+        parse_json_response(content)
+    )
+
+
+def evaluate_gemini(text, api_key, model):
+    import requests
+
+    prompt = build_evaluation_prompt(text)
+
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{model}:generateContent"
+        f"?key={api_key}"
+    )
+
+    body = {
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": (
+                        "أجب بالعربية وبموضوعية. "
+                        "أعد JSON صالحاً فقط دون Markdown."
+                    )
+                }
+            ]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+        },
+    }
+
+    response = requests.post(
+        url,
+        headers={
+            "Content-Type": "application/json"
+        },
+        json=body,
+        timeout=300,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    content = (
+        data["candidates"][0]["content"]["parts"][0]["text"]
+    )
+
+    return normalize_ai_result(
+        parse_json_response(content)
+    )
+
+
+def evaluate_claude(text, api_key, model):
+    import requests
+
+    prompt = build_evaluation_prompt(text)
+
+    url = "https://api.anthropic.com/v1/messages"
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+
+    body = {
+        "model": model,
+        "max_tokens": 16000,
+        "system": (
+            "أجب بالعربية وبموضوعية. "
+            "أعد JSON صالحاً فقط دون Markdown."
+        ),
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        json=body,
+        timeout=300,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    content = ""
+
+    for block in data.get("content", []):
+        if block.get("type") == "text":
+            content += block.get("text", "")
+
+    return normalize_ai_result(
+        parse_json_response(content)
+    )
+
+
+def evaluate_custom_api(text, api_key, model, base_url):
+    import requests
+
+    if not base_url:
+        raise ValueError(
+            "يجب إدخال عنوان API للخدمة المخصصة."
+        )
+
+    prompt = build_evaluation_prompt(text)
+
+    url = base_url.rstrip("/") + "/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    body = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "أجب بالعربية وبموضوعية. "
+                    "أعد JSON صالحاً فقط دون Markdown."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 0.1,
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        json=body,
+        timeout=300,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
+
+    return normalize_ai_result(
+        parse_json_response(content)
+    )
+
+
+def evaluate_ai(
+    text,
+    provider,
+    api_key,
+    model,
+    base_url=""
+):
+    if not api_key:
+        raise ValueError(
+            f"لم يتم إدخال مفتاح API الخاص بـ {provider}."
+        )
+
+    if provider == "OpenAI":
+        return evaluate_openai(
+            text,
+            api_key,
+            model
+        )
+
+    if provider == "Gemini":
+        return evaluate_gemini(
+            text,
+            api_key,
+            model
+        )
+
+    if provider == "Claude":
+        return evaluate_claude(
+            text,
+            api_key,
+            model
+        )
+
+    if provider == "API متوافق مخصص":
+        return evaluate_custom_api(
+            text,
+            api_key,
+            model,
+            base_url
+        )
+
+    raise ValueError(
+        f"مزود غير معروف: {provider}"
+    )
 
 def report(rows):
     total = sum(x["score"] for x in rows)
@@ -410,12 +711,143 @@ with st.sidebar:
     st.write("12–51 و68–71 فقط")
     st.caption(f"44 معياراً — الحد الأقصى {MAX_SCORE} نقطة")
     st.divider()
-    if mode == "ذكاء اصطناعي دلالي":
-        default_key, default_model, default_url = api_config()
-        api_key = st.text_input("مفتاح API", value=default_key, type="password", help="يمكن وضعه في Streamlit Secrets باسم OPENAI_API_KEY.")
-        model = st.text_input("النموذج", value=default_model)
-        base_url = st.text_input("عنوان API", value=default_url)
-        st.caption("يمكن استخدام OpenAI أو أي خدمة متوافقة مع واجهة Chat Completions.")
+if mode == "ذكاء اصطناعي دلالي":
+
+    provider = st.selectbox(
+        "🤖 مزود الذكاء الاصطناعي",
+        [
+            "OpenAI",
+            "Gemini",
+            "Claude",
+            "API متوافق مخصص",
+        ],
+        index=0,
+    )
+
+    if provider == "OpenAI":
+
+        api_key = st.text_input(
+            "🔑 مفتاح OpenAI API",
+            value=get_secret("OPENAI_API_KEY"),
+            type="password",
+            help="ضع المفتاح في Streamlit Secrets باسم OPENAI_API_KEY."
+        )
+
+        model_options = [
+            "gpt-4.1-mini",
+            "gpt-4.1",
+            "gpt-5",
+            "نموذج آخر"
+        ]
+
+        model_choice = st.selectbox(
+            "🧠 نموذج OpenAI",
+            model_options
+        )
+
+        if model_choice == "نموذج آخر":
+            model = st.text_input(
+                "اسم النموذج",
+                value=get_secret("OPENAI_MODEL", "")
+            )
+        else:
+            model = model_choice
+
+        base_url = "https://api.openai.com/v1"
+
+        st.caption(
+            "سيتم استخدام OpenAI مباشرة."
+        )
+
+    elif provider == "Gemini":
+
+        api_key = st.text_input(
+            "🔑 مفتاح Gemini API",
+            value=get_secret("GEMINI_API_KEY"),
+            type="password",
+            help="ضع المفتاح في Streamlit Secrets باسم GEMINI_API_KEY."
+        )
+
+        model_options = [
+            "gemini-3.7-flash",
+            "gemini-3.7-pro",
+            "نموذج آخر"
+        ]
+
+        model_choice = st.selectbox(
+            "🧠 نموذج Gemini",
+            model_options
+        )
+
+        if model_choice == "نموذج آخر":
+            model = st.text_input(
+                "اسم نموذج Gemini",
+                value=get_secret("GEMINI_MODEL", "")
+            )
+        else:
+            model = model_choice
+
+        base_url = ""
+
+        st.caption(
+            "سيتم الاتصال بواجهة Gemini الرسمية مباشرة."
+        )
+
+    elif provider == "Claude":
+
+        api_key = st.text_input(
+            "🔑 مفتاح Claude API",
+            value=get_secret("ANTHROPIC_API_KEY"),
+            type="password",
+            help="ضع المفتاح في Streamlit Secrets باسم ANTHROPIC_API_KEY."
+        )
+
+        model_options = [
+            "claude-sonnet-5",
+            "claude-opus-5",
+            "نموذج آخر"
+        ]
+
+        model_choice = st.selectbox(
+            "🧠 نموذج Claude",
+            model_options
+        )
+
+        if model_choice == "نموذج آخر":
+            model = st.text_input(
+                "اسم نموذج Claude",
+                value=get_secret("ANTHROPIC_MODEL", "")
+            )
+        else:
+            model = model_choice
+
+        base_url = ""
+
+        st.caption(
+            "سيتم الاتصال بواجهة Claude الرسمية مباشرة."
+        )
+
+    else:
+
+        api_key = st.text_input(
+            "🔑 مفتاح API",
+            value=get_secret("CUSTOM_API_KEY"),
+            type="password"
+        )
+
+        model = st.text_input(
+            "🧠 النموذج",
+            value=get_secret("CUSTOM_API_MODEL", "")
+        )
+
+        base_url = st.text_input(
+            "🌐 عنوان API",
+            value=get_secret("CUSTOM_API_BASE_URL", "")
+        )
+
+        st.caption(
+            "يجب أن تكون الخدمة متوافقة مع OpenAI Chat Completions."
+        )
 
 upload = st.file_uploader(
     "📤 حمّل خطة البحث",
@@ -446,8 +878,13 @@ if upload:
                     st.error("أدخل مفتاح API في الشريط الجانبي أو ضعه في Streamlit Secrets.")
                     st.stop()
                 with st.spinner("يجري الآن تحليل الخطة معياراً معياراً وكتابة التقرير الأكاديمي..."):
-                    rows, analysis = evaluate_ai(text, api_key, model, base_url)
-            else:
+rows, analysis = evaluate_ai(
+    text,
+    provider,
+    api_key,
+    model,
+    base_url
+)            else:
                 with st.spinner("جارٍ إجراء الفحص الآلي الأولي..."):
                     rows = evaluate_heuristic(text)
                     total, pct, level = report(rows)
