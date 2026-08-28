@@ -884,59 +884,78 @@ def call_claude(
 
     import requests
 
+    api_key = api_key.strip()
+
+    if not api_key:
+        raise ValueError(
+            "مفتاح KiosAPI فارغ."
+        )
+
     response = requests.post(
 
-        "https://api.anthropic.com/v1/messages",
+        "https://api.kiosapi.id/v1/chat/completions",
 
         headers={
-            "x-api-key":
-                api_key,
-
-            "anthropic-version":
-                "2023-06-01",
-
-            "content-type":
-                "application/json"
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
         },
 
         json={
             "model": model,
 
-            "max_tokens": 16000,
-
-            "system":
-                "أنت محكّم أكاديمي. "
-                "أجب بالعربية وأعد JSON فقط.",
-
             "messages": [
                 {
-                    "role": "user",
+                    "role": "system",
                     "content":
-                        build_prompt(text)
+                        "أنت محكّم أكاديمي متخصص في "
+                        "مناهج البحث العلمي. "
+                        "أجب بالعربية وأعد JSON فقط."
+                },
+                {
+                    "role": "user",
+                    "content": build_prompt(text)
                 }
-            ]
+            ],
+
+            "temperature": 0.1
         },
 
         timeout=300
     )
 
-    response.raise_for_status()
+    if response.status_code != 200:
 
-    content = "\n".join(
-        block.get(
-            "text",
-            ""
+        try:
+
+            error_data = response.json()
+
+            error_message = (
+                error_data
+                .get("error", {})
+                .get("message", response.text)
+            )
+
+        except Exception:
+
+            error_message = response.text
+
+        raise RuntimeError(
+            f"KiosAPI Error "
+            f"{response.status_code}: "
+            f"{error_message}"
         )
-        for block in response.json()
-        .get("content", [])
-        if block.get("type") == "text"
+
+    data = response.json()
+
+    content = (
+        data["choices"][0]
+        ["message"]
+        ["content"]
     )
 
     return normalize_results(
         parse_json(content)
     )
-
-
 # ============================================================
 # API مخصص
 # ============================================================
@@ -1007,7 +1026,6 @@ def call_custom(
     return normalize_results(
         parse_json(content)
     )
-
 
 # ============================================================
 # اختيار المزود
