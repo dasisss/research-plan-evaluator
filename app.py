@@ -1,4 +1,3 @@
-````python
 import io
 import json
 import os
@@ -6,2121 +5,1957 @@ import re
 from datetime import datetime
 
 import streamlit as st
+
 from criteria import CRITERIA, CATEGORIES, MAX_SCORE
 
-
 # ============================================================
+
 # إعداد الصفحة
+
 # ============================================================
 
 st.set_page_config(
-    page_title="مقيّم خطة البحث العلمي",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="expanded",
+page_title="مقيّم خطة البحث العلمي",
+page_icon="📚",
+layout="wide",
+initial_sidebar_state="expanded",
 )
 
-
 # ============================================================
-# تنسيق الواجهة
+
+# CSS
+
 # ============================================================
 
 st.markdown(
-    """
-    <style>
-    html, body, [class*="css"] {
-        font-family: Tahoma, Arial, sans-serif;
-    }
+""" <style>
+.block-container {
+direction: rtl;
+max-width: 1450px;
+padding-top: 1rem;
+}
 
-    .block-container {
-        direction: rtl;
-        max-width: 1450px;
-        padding-top: 1rem;
-    }
+```
+.hero {
+    padding: 28px 32px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #173b63, #2f7f8f);
+    color: white;
+    margin-bottom: 22px;
+}
 
-    .hero {
-        padding: 28px 30px;
-        border-radius: 22px;
-        background: linear-gradient(135deg,#173b63,#2f7f8f);
-        color: white;
-        margin-bottom: 18px;
-    }
+.hero h1 {
+    margin: 0;
+    font-size: 2.2rem;
+}
 
-    .hero h1 {
-        font-size: 2.15rem;
-        margin: 0 0 8px;
-    }
+.hero p {
+    margin-top: 10px;
+    line-height: 1.9;
+    font-size: 1.05rem;
+}
 
-    .hero p {
-        font-size: 1.03rem;
-        margin: 0;
-        opacity: .96;
-        line-height: 1.8;
-    }
+.result-card {
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid #dce5e9;
+    background: white;
+    margin-bottom: 15px;
+    line-height: 1.9;
+}
 
-    .card {
-        padding: 18px;
-        border: 1px solid #dfe7eb;
-        border-radius: 16px;
-        background: #fff;
-        margin-bottom: 12px;
-        line-height: 1.9;
-    }
+.criterion-card {
+    padding: 15px;
+    border-radius: 12px;
+    background: #f8fafb;
+    border-right: 5px solid #2f7f8f;
+    margin-bottom: 10px;
+}
 
-    .good {
-        border-right: 5px solid #2e7d32;
-    }
+.small-note {
+    color: #667781;
+    font-size: 0.9rem;
+}
+</style>
+""",
+unsafe_allow_html=True,
+```
 
-    .warn {
-        border-right: 5px solid #c78b22;
-    }
-
-    .bad {
-        border-right: 5px solid #b23a48;
-    }
-
-    .muted {
-        color: #65747e;
-        font-size: .92rem;
-    }
-
-    .stProgress > div > div > div > div {
-        background-color: #2f7f8f;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
 )
-
-
-st.markdown(
-    """
-    <div class="hero">
-        <h1>📚 مقيّم خطة البحث العلمي</h1>
-        <p>
-        تقييم أكاديمي دلالي لخطة البحث وفق المعايير
-        12–51 و68–71 فقط، مع الدرجة الرقمية والتحليل
-        الكتابي والأدلة والتوصيات.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 
 # ============================================================
-# قراءة المفاتيح من Streamlit Secrets
+
+# العنوان
+
+# ============================================================
+
+st.markdown(
+""" <div class="hero"> <h1>📚 مقيّم خطة البحث العلمي</h1> <p>
+نظام ذكي لتقييم خطة البحث وفق المعايير المعتمدة
+من 12 إلى 51 ومن 68 إلى 71 فقط، مع تقديم
+درجة رقمية وتحليل أكاديمي مكتوب ودليل وتوصيات. </p> </div>
+""",
+unsafe_allow_html=True,
+)
+
+# ============================================================
+
+# أدوات مساعدة
+
 # ============================================================
 
 def get_secret(name, default=""):
-    try:
-        if name in st.secrets:
-            value = st.secrets[name]
-            if value:
-                return str(value)
-    except Exception:
-        pass
+try:
+if name in st.secrets:
+return str(st.secrets[name])
+except Exception:
+pass
 
-    return os.getenv(name, default)
-
-
-# ============================================================
-# تنظيف النص
-# ============================================================
+```
+return os.getenv(name, default)
+```
 
 def clean_text(text):
-    text = text.replace("\u200f", " ")
-    text = text.replace("\u200e", " ")
-    text = text.replace("\ufeff", " ")
+text = text.replace("\u200f", " ")
+text = text.replace("\u200e", " ")
+text = text.replace("\ufeff", " ")
 
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
+```
+text = re.sub(r"[ \t]+", " ", text)
+text = re.sub(r"\n{3,}", "\n\n", text)
 
-    return text.strip()
-
+return text.strip()
+```
 
 # ============================================================
-# قراءة Word
+
+# استخراج Word
+
 # ============================================================
 
 @st.cache_data(show_spinner=False)
 def extract_docx(data):
 
-    from docx import Document
+```
+from docx import Document
 
-    doc = Document(io.BytesIO(data))
+document = Document(
+    io.BytesIO(data)
+)
 
-    parts = []
+parts = []
 
-    for p in doc.paragraphs:
-        if p.text.strip():
-            parts.append(p.text.strip())
+for paragraph in document.paragraphs:
+    if paragraph.text.strip():
+        parts.append(
+            paragraph.text.strip()
+        )
 
-    for table in doc.tables:
-        for row in table.rows:
+for table in document.tables:
+
+    for row in table.rows:
+
+        cells = [
+            cell.text.strip()
+            for cell in row.cells
+        ]
+
+        if any(cells):
             parts.append(
-                " | ".join(
-                    cell.text.strip()
-                    for cell in row.cells
-                )
+                " | ".join(cells)
             )
 
-    return clean_text("\n".join(parts))
-
+return clean_text(
+    "\n".join(parts)
+)
+```
 
 # ============================================================
-# قراءة PDF
+
+# استخراج PDF
+
 # ============================================================
 
 @st.cache_data(show_spinner=False)
 def extract_pdf(data):
 
-    import fitz
+```
+import fitz
 
-    doc = fitz.open(
-        stream=data,
-        filetype="pdf"
+document = fitz.open(
+    stream=data,
+    filetype="pdf"
+)
+
+pages = []
+
+for page in document:
+    pages.append(
+        page.get_text("text")
     )
 
-    text = []
-
-    for page in doc:
-        text.append(
-            page.get_text("text")
-        )
-
-    return clean_text(
-        "\n".join(text)
-    )
-
+return clean_text(
+    "\n".join(pages)
+)
+```
 
 # ============================================================
+
 # OCR للصورة
+
 # ============================================================
 
 @st.cache_data(show_spinner=False)
-def ocr_image(data):
+def extract_image(data):
 
-    from PIL import Image
-    import pytesseract
+```
+from PIL import Image
+import pytesseract
 
-    image = Image.open(
-        io.BytesIO(data)
+image = Image.open(
+    io.BytesIO(data)
+)
+
+try:
+    languages = pytesseract.get_languages(
+        config=""
     )
 
-    try:
-        available = pytesseract.get_languages(
-            config=""
+    language = (
+        "ara+eng"
+        if "ara" in languages
+        else "eng"
+    )
+
+except Exception:
+    language = "eng"
+
+text = pytesseract.image_to_string(
+    image,
+    lang=language,
+    config="--psm 6"
+)
+
+return clean_text(text)
+```
+
+# ============================================================
+
+# OCR للـ PDF المصور
+
+# ============================================================
+
+@st.cache_data(show_spinner=False)
+def extract_pdf_ocr(data):
+
+```
+import fitz
+from PIL import Image
+import pytesseract
+
+document = fitz.open(
+    stream=data,
+    filetype="pdf"
+)
+
+try:
+    languages = pytesseract.get_languages(
+        config=""
+    )
+
+    language = (
+        "ara+eng"
+        if "ara" in languages
+        else "eng"
+    )
+
+except Exception:
+    language = "eng"
+
+pages = []
+
+for page in document:
+
+    pixmap = page.get_pixmap(
+        matrix=fitz.Matrix(2, 2),
+        alpha=False
+    )
+
+    image = Image.open(
+        io.BytesIO(
+            pixmap.tobytes("png")
         )
+    )
 
-        lang = (
-            "ara+eng"
-            if "ara" in available
-            else "eng"
-        )
-
-    except Exception:
-        lang = "eng"
-
-    return clean_text(
+    pages.append(
         pytesseract.image_to_string(
             image,
-            lang=lang,
+            lang=language,
             config="--psm 6"
         )
     )
 
+return clean_text(
+    "\n".join(pages)
+)
+```
 
 # ============================================================
-# OCR للـ PDF
-# ============================================================
 
-@st.cache_data(show_spinner=False)
-def ocr_pdf(data):
-
-    import fitz
-    from PIL import Image
-    import pytesseract
-
-    doc = fitz.open(
-        stream=data,
-        filetype="pdf"
-    )
-
-    output = []
-
-    try:
-        available = pytesseract.get_languages(
-            config=""
-        )
-
-        lang = (
-            "ara+eng"
-            if "ara" in available
-            else "eng"
-        )
-
-    except Exception:
-        lang = "eng"
-
-    for page in doc:
-
-        pix = page.get_pixmap(
-            matrix=fitz.Matrix(2, 2),
-            alpha=False
-        )
-
-        image = Image.open(
-            io.BytesIO(
-                pix.tobytes("png")
-            )
-        )
-
-        output.append(
-            pytesseract.image_to_string(
-                image,
-                lang=lang,
-                config="--psm 6"
-            )
-        )
-
-    return clean_text(
-        "\n".join(output)
-    )
-
+# اختيار طريقة الاستخراج
 
 # ============================================================
-# استخراج النص من الملف
-# ============================================================
 
-def extract_upload(upload):
+def extract_file(uploaded_file):
 
-    data = upload.getvalue()
-    name = upload.name.lower()
+```
+data = uploaded_file.getvalue()
+filename = uploaded_file.name.lower()
 
-    if name.endswith(".docx"):
-        return extract_docx(data), "Word"
-
-    if name.endswith(".pdf"):
-
-        text = extract_pdf(data)
-
-        if len(
-            re.sub(r"\s", "", text)
-        ) < 300:
-
-            return (
-                ocr_pdf(data),
-                "PDF + OCR"
-            )
-
-        return text, "PDF نصي"
+if filename.endswith(".docx"):
 
     return (
-        ocr_image(data),
-        "صورة + OCR"
+        extract_docx(data),
+        "Word"
     )
 
+if filename.endswith(".pdf"):
+
+    text = extract_pdf(data)
+
+    compact = re.sub(
+        r"\s",
+        "",
+        text
+    )
+
+    if len(compact) < 300:
+
+        return (
+            extract_pdf_ocr(data),
+            "PDF مصور + OCR"
+        )
+
+    return (
+        text,
+        "PDF"
+    )
+
+return (
+    extract_image(data),
+    "صورة + OCR"
+)
+```
 
 # ============================================================
-# استخراج عنوان البحث
+
+# عنوان البحث
+
 # ============================================================
 
 def find_title(text):
 
-    lines = [
-        x.strip()
-        for x in text.splitlines()
-        if x.strip()
-    ]
+```
+lines = [
+    line.strip()
+    for line in text.splitlines()
+    if line.strip()
+]
 
-    for i, line in enumerate(lines[:100]):
+patterns = [
+    r"^عنوان البحث",
+    r"^عنوان الدراسة",
+    r"^عنوان",
+    r"^title"
+]
+
+for index, line in enumerate(lines[:100]):
+
+    for pattern in patterns:
 
         if re.search(
-            r"^(عنوان|عنوان البحث|عنوان الدراسة|title)\b",
+            pattern,
             line,
-            re.I
+            re.IGNORECASE
         ):
 
-            if i + 1 < len(lines):
-                return lines[i + 1]
+            if index + 1 < len(lines):
+                return lines[index + 1]
 
-        if (
-            "موضوع البحث" in line
-            and i + 1 < len(lines)
-        ):
-            return lines[i + 1]
+if lines:
+    return lines[0]
 
-    for line in lines[:35]:
+return "غير محدد"
+```
 
-        if (
-            4 <= len(line.split()) <= 30
-            and not re.search(
-                r"جامعة|كلية|قسم|الجمهورية|وزارة|السنة",
-                line
-            )
-        ):
-            return line
+# ============================================================
 
-    return (
-        lines[0]
-        if lines
-        else ""
+# استخراج المقدمة
+
+# ============================================================
+
+def get_introduction(text):
+
+```
+lines = [
+    line.strip()
+    for line in text.splitlines()
+    if line.strip()
+]
+
+start = None
+
+headings = [
+    "المقدمة",
+    "مقدمة",
+    "تمهيد"
+]
+
+for i, line in enumerate(lines):
+
+    if any(
+        line.startswith(h)
+        for h in headings
+    ):
+
+        start = i + 1
+        break
+
+if start is None:
+    return ""
+
+result = []
+
+stop_words = [
+    "مشكلة الدراسة",
+    "إشكالية الدراسة",
+    "تساؤلات الدراسة",
+    "أسئلة الدراسة",
+    "فرضيات الدراسة",
+    "فروض الدراسة",
+    "أهمية الدراسة",
+    "أهداف الدراسة",
+    "مصطلحات الدراسة",
+    "حدود الدراسة",
+    "منهج الدراسة"
+]
+
+for line in lines[start:]:
+
+    if any(
+        line.startswith(stop)
+        for stop in stop_words
+    ):
+        break
+
+    result.append(line)
+
+    if len(
+        " ".join(result)
+    ) >= 9000:
+        break
+
+return " ".join(result)[:9000]
+```
+
+# ============================================================
+
+# بناء قائمة المعايير
+
+# ============================================================
+
+def criteria_for_prompt():
+
+```
+result = []
+
+for number, category, criterion in CRITERIA:
+
+    result.append(
+        f"{number}. {category}: {criterion}"
     )
 
+return "\n".join(result)
+```
 
 # ============================================================
-# استخراج المقدمة أو قسم معين
-# ============================================================
 
-def section_excerpt(
-    text,
-    headings,
-    limit=9000
-):
-
-    lines = [
-        x.strip()
-        for x in text.splitlines()
-        if x.strip()
-    ]
-
-    start = None
-
-    for i, line in enumerate(lines):
-
-        normalized = re.sub(
-            r"[\s:：]+$",
-            "",
-            line
-        ).lower()
-
-        if any(
-            normalized.startswith(
-                h.lower()
-            )
-            for h in headings
-        ):
-            start = i + 1
-            break
-
-    if start is None:
-        return ""
-
-    chunks = []
-
-    for line in lines[start:]:
-
-        if (
-            chunks
-            and re.match(
-                r"^(مشكلة الدراسة|"
-                r"تساؤلات الدراسة|"
-                r"فروض الدراسة|"
-                r"أهمية الدراسة|"
-                r"أهداف الدراسة|"
-                r"مصطلحات الدراسة|"
-                r"حدود الدراسة|"
-                r"منهج الدراسة|"
-                r"المنهج|"
-                r"الخاتمة)\b",
-                line
-            )
-        ):
-            break
-
-        chunks.append(line)
-
-        if len(
-            " ".join(chunks)
-        ) >= limit:
-            break
-
-    return " ".join(chunks)[:limit]
-
+# Prompt
 
 # ============================================================
-# بناء Prompt التقييم
-# ============================================================
 
-def build_evaluation_prompt(text):
+def build_prompt(text):
 
-    criteria_text = "\n".join(
-        f"{n}. [{cat}] {criterion}"
-        for n, cat, criterion in CRITERIA
-    )
+```
+title = find_title(text)
+introduction = get_introduction(text)
 
-    title = find_title(text)
+return f"""
+```
 
-    introduction = section_excerpt(
-        text,
-        [
-            "المقدمة",
-            "مقدمة",
-            "تمهيد"
-        ],
-        10000
-    )
+أنت أستاذ جامعي ومحكّم متخصص في مناهج البحث العلمي.
 
-    # الحد الأقصى للنص المرسل إلى API
-    full_text = text[:65000]
+مهمتك تقييم خطة البحث المرفوعة وفق المعايير
+المعتمدة في النظام.
 
-    return f"""
-أنت محكّم أكاديمي متخصص في مناهج البحث العلمي.
+هام جداً:
 
-مهمتك تقييم خطة بحث عربية تقييماً أكاديمياً
-دقيقاً ودلالياً.
+يجب تقييم المعايير التالية فقط:
 
-مهم جداً:
+12 إلى 51
+و
+68 إلى 71
 
-قيّم فقط المعايير التالية:
+ولا تستخدم أي معيار آخر.
 
-12–51
-68–71
+عدد المعايير:
+{len(CRITERIA)}
 
-ولا تقيم أو تحتسب أي معيار آخر.
-
-عدد المعايير المعتمدة هو:
-44 معياراً.
-
----------------------------------------
-مقياس التقييم
----------------------------------------
+الدرجة لكل معيار:
 
 0 = غير متحقق
-
 1 = متحقق جزئياً
-
 2 = متحقق بوضوح
 
----------------------------------------
-لكل معيار
----------------------------------------
+لا تمنح درجة اعتماداً على وجود كلمة مفتاحية فقط.
+يجب قراءة السياق وفهم المعنى.
 
-أعد:
+لا تخترع معلومات.
 
-score:
-0 أو 1 أو 2
+إذا لم تجد دليلاً واضحاً في النص، قل:
+"لا يوجد دليل كافٍ في النص."
+
+لكل معيار أعد:
+
+id
+score
+status
+evidence
+explanation
+suggestion
+
+حيث:
 
 status:
-غير متحقق
-أو
-متحقق جزئياً
-أو
-متحقق
+
+* غير متحقق
+* متحقق جزئياً
+* متحقق
 
 evidence:
-دليل حقيقي ومختصر من النص المرفوع.
-
-إذا لم يوجد دليل:
-"لا يوجد دليل كافٍ في النص"
+دليل مختصر وحقيقي من خطة البحث.
 
 explanation:
-تحليل أكاديمي يشرح سبب الدرجة.
-
-يجب ألا يكون مجرد إعادة صياغة للمعيار.
+تحليل أكاديمي يبرر الدرجة.
 
 suggestion:
-توصية عملية محددة لتحسين المعيار إذا كانت
-الدرجة أقل من 2.
+اقتراح عملي لتحسين المعيار إذا كانت الدرجة أقل من 2.
 
----------------------------------------
+==================================================
 التحليل الأكاديمي العام
----------------------------------------
+=======================
 
-اكتب تحليلاً أكاديمياً مترابطاً في:
+اكتب تحليلاً أكاديمياً متكاملاً في الحقل:
 
 overall_analysis
 
-ويجب أن يتضمن:
+ويجب أن يتناول:
 
-1. الحكم العام على الخطة.
+1. جودة عنوان البحث.
+2. المقدمة.
+3. مشكلة الدراسة.
+4. تساؤلات الدراسة.
+5. فروض الدراسة.
+6. أهمية الدراسة.
+7. أهداف الدراسة.
+8. المصطلحات.
+9. حدود الدراسة.
+10. منهج البحث.
+11. الترابط بين عناصر الخطة.
+12. شخصية الباحث.
+13. اللغة والأسلوب.
+14. نقاط القوة.
+15. نقاط الضعف.
+16. أهم التعديلات المقترحة.
 
-2. تحليل عنوان البحث من حيث:
-- الوضوح
-- الاختصار
-- التحديد
-- الموضوع الرئيس
-- المتغيرات
-- الغموض
+لا تكتف بتلخيص الدرجات.
 
-3. تحليل المقدمة من حيث:
-- الانتقال من العام إلى الخاص
-- عرض موضوع البحث
-- تحديد المشكلة
-- عرض العوامل والمتغيرات
-- التوازن بين الإسهاب والإيجاز
-- وضوح شخصية الباحث
-
-4. تحليل مشكلة الدراسة ومبرراتها.
-
-5. تحليل التساؤلات والفروض.
-
-6. تحليل الأهمية والأهداف.
-
-7. تحليل المصطلحات.
-
-8. تحليل الحدود.
-
-9. تحليل المنهج.
-
-10. تحليل الترابط العام بين عناصر الخطة.
-
-11. تحليل شخصية الباحث.
-
-12. تحليل السلامة اللغوية والإملائية.
-
-13. نقاط القوة.
-
-14. نقاط الضعف.
-
-15. توصيات عملية مرتبة حسب الأولوية.
-
----------------------------------------
-قواعد مهمة
----------------------------------------
-
-لا تحكم بناءً على وجود كلمة واحدة فقط.
-
-افهم السياق والمعنى والترابط.
-
-لا تخترع معلومات غير موجودة.
-
-لا تنسب للباحث فكرة غير موجودة في النص.
-
-لا تمنح 2 لمجرد وجود عنوان فرعي.
-
-عند غياب الدليل اذكر ذلك صراحة.
-
-لا تجعل التحليل مجرد تلخيص للدرجات.
-
-لا تستخدم عبارات عامة مثل:
-"الخطة جيدة"
-دون تفسير.
-
-اكتب بالعربية الأكاديمية الواضحة.
-
----------------------------------------
+==================================================
 عنوان البحث
----------------------------------------
+===========
 
 {title}
 
----------------------------------------
+==================================================
 المقدمة
----------------------------------------
+=======
 
 {introduction}
 
----------------------------------------
-المعايير المسموح بها
----------------------------------------
+==================================================
+المعايير
+========
 
-{criteria_text}
+{criteria_for_prompt()}
 
----------------------------------------
-نص خطة البحث
----------------------------------------
+==================================================
+خطة البحث
+=========
 
-{full_text}
+{text[:70000]}
 
----------------------------------------
-صيغة JSON المطلوبة
----------------------------------------
+==================================================
+صيغة الإجابة
+============
 
-أعد JSON فقط:
+أعد JSON صالحاً فقط بالشكل التالي:
 
 {{
-    "overall_analysis": "...",
-    "results": [
-        {{
-            "id": 12,
-            "score": 2,
-            "status": "متحقق",
-            "evidence": "...",
-            "explanation": "...",
-            "suggestion": "..."
-        }}
-    ]
+"overall_analysis": "...",
+"results": [
+{{
+"id": 12,
+"score": 2,
+"status": "متحقق",
+"evidence": "...",
+"explanation": "...",
+"suggestion": "..."
+}}
+]
 }}
 
-يجب أن تحتوي results على المعايير
-المسموح بها فقط.
+يجب أن يحتوي results على جميع المعايير الـ {len(CRITERIA)}
+دون إضافة أي معيار آخر.
 """
 
-
-# ============================================================
-# تنظيف JSON
 # ============================================================
 
-def parse_json_response(content):
+# قراءة JSON
 
-    content = content.strip()
+# ============================================================
 
-    content = re.sub(
-        r"^```(?:json)?\s*",
-        "",
-        content,
-        flags=re.I
+def parse_json(text):
+
+````
+text = text.strip()
+
+text = re.sub(
+    r"^```json\s*",
+    "",
+    text,
+    flags=re.IGNORECASE
+)
+
+text = re.sub(
+    r"^```\s*",
+    "",
+    text
+)
+
+text = re.sub(
+    r"\s*```$",
+    "",
+    text
+)
+
+try:
+    return json.loads(text)
+
+except Exception:
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1:
+        raise ValueError(
+            "لم يتم العثور على JSON صالح في استجابة النموذج."
+        )
+
+    return json.loads(
+        text[start:end + 1]
     )
+````
 
-    content = re.sub(
-        r"\s*```$",
-        "",
-        content
-    )
+# ============================================================
+
+# توحيد النتائج
+
+# ============================================================
+
+def normalize_results(data):
+
+```
+allowed = {
+    item[0]: item
+    for item in CRITERIA
+}
+
+received = {}
+
+for item in data.get(
+    "results",
+    []
+):
 
     try:
-        return json.loads(content)
+        number = int(
+            item.get("id")
+        )
+    except Exception:
+        continue
 
-    except json.JSONDecodeError:
+    if number not in allowed:
+        continue
 
-        start = content.find("{")
-        end = content.rfind("}")
-
-        if (
-            start >= 0
-            and end > start
-        ):
-
-            return json.loads(
-                content[
-                    start:end + 1
-                ]
+    try:
+        score = int(
+            item.get(
+                "score",
+                0
             )
+        )
+    except Exception:
+        score = 0
 
-        raise
+    score = max(
+        0,
+        min(2, score)
+    )
 
+    category = allowed[number][1]
+    criterion = allowed[number][2]
 
-# ============================================================
-# توحيد نتيجة الذكاء الاصطناعي
-# ============================================================
+    status = item.get(
+        "status"
+    )
 
-def normalize_ai_result(parsed):
+    if not status:
 
-    allowed_ids = {
-        int(x[0])
-        for x in CRITERIA
+        status = [
+            "غير متحقق",
+            "متحقق جزئياً",
+            "متحقق"
+        ][score]
+
+    received[number] = {
+        "id": number,
+        "category": category,
+        "criterion": criterion,
+        "score": score,
+        "status": status,
+        "evidence": item.get(
+            "evidence",
+            "لا يوجد دليل كافٍ في النص."
+        ),
+        "explanation": item.get(
+            "explanation",
+            ""
+        ),
+        "suggestion": item.get(
+            "suggestion",
+            ""
+        )
     }
 
-    by_id = {}
+results = []
 
-    for item in parsed.get(
-        "results",
-        []
-    ):
+for number, category, criterion in CRITERIA:
 
-        try:
-            item_id = int(
-                item.get("id")
-            )
-        except Exception:
-            continue
+    if number in received:
 
-        if item_id in allowed_ids:
-            by_id[item_id] = item
-
-    rows = []
-
-    for n, category, criterion in CRITERIA:
-
-        item = by_id.get(
-            n,
-            {}
+        results.append(
+            received[number]
         )
 
-        try:
-            score = int(
-                item.get(
-                    "score",
-                    0
-                )
-            )
-        except Exception:
-            score = 0
+    else:
 
-        score = max(
-            0,
-            min(2, score)
-        )
-
-        status = item.get(
-            "status",
-            [
-                "غير متحقق",
-                "متحقق جزئياً",
-                "متحقق"
-            ][score]
-        )
-
-        rows.append(
+        results.append(
             {
-                "id": n,
+                "id": number,
                 "category": category,
                 "criterion": criterion,
-                "score": score,
-                "status": status,
-                "evidence": item.get(
-                    "evidence",
-                    "لا يوجد دليل كافٍ في النص"
-                ),
-                "explanation": item.get(
-                    "explanation",
-                    ""
-                ),
-                "suggestion": item.get(
-                    "suggestion",
-                    ""
-                )
+                "score": 0,
+                "status": "غير متحقق",
+                "evidence":
+                    "لم يقدم النموذج دليلاً لهذا المعيار.",
+                "explanation":
+                    "لم يتم الحصول على نتيجة كافية.",
+                "suggestion":
+                    "يرجى مراجعة هذا المعيار في خطة البحث."
             }
         )
 
-    return (
-        rows,
-        parsed.get(
-            "overall_analysis",
-            ""
-        ).strip()
+return (
+    results,
+    data.get(
+        "overall_analysis",
+        "لم يتم توفير تحليل عام."
     )
-
+)
+```
 
 # ============================================================
+
 # OpenAI
+
 # ============================================================
 
-def evaluate_openai(
-    text,
-    api_key,
-    model
+def call_openai(
+text,
+api_key,
+model
 ):
 
-    import requests
+```
+import requests
 
-    response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
+response = requests.post(
 
-        headers={
-            "Authorization":
-                f"Bearer {api_key}",
-            "Content-Type":
-                "application/json"
-        },
+    "https://api.openai.com/v1/chat/completions",
 
-        json={
-            "model": model,
+    headers={
+        "Authorization":
+            f"Bearer {api_key}",
+        "Content-Type":
+            "application/json"
+    },
 
-            "messages": [
-                {
-                    "role": "system",
-                    "content":
-                        "أجب بالعربية. "
-                        "أعد JSON صالحاً فقط."
-                },
-                {
-                    "role": "user",
-                    "content":
-                        build_evaluation_prompt(
-                            text
-                        )
-                }
-            ],
+    json={
+        "model": model,
 
-            "temperature": 0.1
-        },
-
-        timeout=300
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    content = (
-        data["choices"][0]
-        ["message"]["content"]
-    )
-
-    return normalize_ai_result(
-        parse_json_response(content)
-    )
-
-
-# ============================================================
-# Gemini
-# ============================================================
-
-def evaluate_gemini(
-    text,
-    api_key,
-    model
-):
-
-    import requests
-
-    url = (
-        "https://generativelanguage.googleapis.com/"
-        f"v1beta/models/{model}:generateContent"
-        f"?key={api_key}"
-    )
-
-    response = requests.post(
-        url,
-
-        headers={
-            "Content-Type":
-                "application/json"
-        },
-
-        json={
-            "systemInstruction": {
-                "parts": [
-                    {
-                        "text":
-                            "أجب بالعربية "
-                            "وبموضوعية. "
-                            "أعد JSON فقط."
-                    }
-                ]
+        "messages": [
+            {
+                "role": "system",
+                "content":
+                    "أنت محكّم أكاديمي. "
+                    "أجب بالعربية وأعد JSON فقط."
             },
-
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text":
-                                build_evaluation_prompt(
-                                    text
-                                )
-                        }
-                    ]
-                }
-            ],
-
-            "generationConfig": {
-                "temperature": 0.1
+            {
+                "role": "user",
+                "content":
+                    build_prompt(text)
             }
-        },
+        ],
 
-        timeout=300
-    )
+        "temperature": 0.1
+    },
 
-    response.raise_for_status()
+    timeout=300
+)
 
-    data = response.json()
+response.raise_for_status()
 
-    content = (
-        data["candidates"][0]
-        ["content"]["parts"][0]
-        ["text"]
-    )
+data = response.json()
 
-    return normalize_ai_result(
-        parse_json_response(content)
-    )
+content = (
+    data["choices"][0]
+    ["message"]
+    ["content"]
+)
 
+return normalize_results(
+    parse_json(content)
+)
+```
 
 # ============================================================
-# Claude
+
+# Gemini
+
 # ============================================================
 
-def evaluate_claude(
-    text,
-    api_key,
-    model
+def call_gemini(
+text,
+api_key,
+model
 ):
 
-    import requests
+```
+import requests
 
-    response = requests.post(
-        "https://api.anthropic.com/v1/messages",
+url = (
+    "https://generativelanguage.googleapis.com/"
+    f"v1beta/models/{model}:generateContent"
+    f"?key={api_key}"
+)
 
-        headers={
-            "x-api-key":
-                api_key,
-            "anthropic-version":
-                "2023-06-01",
-            "Content-Type":
-                "application/json"
-        },
+response = requests.post(
 
-        json={
-            "model": model,
+    url,
 
-            "max_tokens": 16000,
+    headers={
+        "Content-Type":
+            "application/json"
+    },
 
-            "system":
-                "أجب بالعربية "
-                "وبموضوعية. "
-                "أعد JSON فقط.",
-
-            "messages": [
+    json={
+        "systemInstruction": {
+            "parts": [
                 {
-                    "role": "user",
-                    "content":
-                        build_evaluation_prompt(
-                            text
-                        )
+                    "text":
+                        "أنت محكّم أكاديمي. "
+                        "أجب بالعربية وأعد JSON فقط."
                 }
             ]
         },
 
-        timeout=300
-    )
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text":
+                            build_prompt(text)
+                    }
+                ]
+            }
+        ],
 
-    response.raise_for_status()
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType":
+                "application/json"
+        }
+    },
 
-    data = response.json()
+    timeout=300
+)
 
-    content = ""
+response.raise_for_status()
 
-    for block in data.get(
-        "content",
-        []
-    ):
+data = response.json()
 
-        if block.get(
-            "type"
-        ) == "text":
+content = (
+    data["candidates"][0]
+    ["content"]["parts"][0]
+    ["text"]
+)
 
-            content += block.get(
+return normalize_results(
+    parse_json(content)
+)
+```
+
+# ============================================================
+
+# Claude
+
+# ============================================================
+
+def call_claude(
+text,
+api_key,
+model
+):
+
+```
+import requests
+
+response = requests.post(
+
+    "https://api.anthropic.com/v1/messages",
+
+    headers={
+        "x-api-key":
+            api_key,
+        "anthropic-version":
+            "2023-06-01",
+        "content-type":
+            "application/json"
+    },
+
+    json={
+        "model": model,
+        "max_tokens": 16000,
+
+        "system":
+            "أنت محكّم أكاديمي. "
+            "أجب بالعربية وأعد JSON فقط.",
+
+        "messages": [
+            {
+                "role": "user",
+                "content":
+                    build_prompt(text)
+            }
+        ]
+    },
+
+    timeout=300
+)
+
+response.raise_for_status()
+
+data = response.json()
+
+parts = []
+
+for block in data.get(
+    "content",
+    []
+):
+
+    if block.get("type") == "text":
+        parts.append(
+            block.get(
                 "text",
                 ""
             )
+        )
 
-    return normalize_ai_result(
-        parse_json_response(content)
-    )
+content = "\n".join(parts)
 
+return normalize_results(
+    parse_json(content)
+)
+```
 
 # ============================================================
-# API متوافق مع OpenAI
+
+# API مخصص متوافق مع OpenAI
+
 # ============================================================
 
-def evaluate_custom_api(
-    text,
-    api_key,
-    model,
-    base_url
+def call_custom(
+text,
+api_key,
+model,
+base_url
 ):
 
-    import requests
+```
+import requests
 
-    if not base_url:
-        raise ValueError(
-            "يجب إدخال عنوان API."
-        )
-
-    url = (
-        base_url.rstrip("/")
-        + "/chat/completions"
-    )
-
-    response = requests.post(
-        url,
-
-        headers={
-            "Authorization":
-                f"Bearer {api_key}",
-            "Content-Type":
-                "application/json"
-        },
-
-        json={
-            "model": model,
-
-            "messages": [
-                {
-                    "role": "system",
-                    "content":
-                        "أجب بالعربية "
-                        "وأعد JSON فقط."
-                },
-                {
-                    "role": "user",
-                    "content":
-                        build_evaluation_prompt(
-                            text
-                        )
-                }
-            ],
-
-            "temperature": 0.1
-        },
-
-        timeout=300
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    content = (
-        data["choices"][0]
-        ["message"]["content"]
-    )
-
-    return normalize_ai_result(
-        parse_json_response(content)
-    )
-
-
-# ============================================================
-# اختيار API
-# ============================================================
-
-def evaluate_ai(
-    text,
-    provider,
-    api_key,
-    model,
-    base_url=""
-):
-
-    if not api_key:
-        raise ValueError(
-            f"لم يتم إدخال مفتاح API الخاص بـ {provider}."
-        )
-
-    if provider == "OpenAI":
-        return evaluate_openai(
-            text,
-            api_key,
-            model
-        )
-
-    if provider == "Gemini":
-        return evaluate_gemini(
-            text,
-            api_key,
-            model
-        )
-
-    if provider == "Claude":
-        return evaluate_claude(
-            text,
-            api_key,
-            model
-        )
-
-    if provider == "API متوافق مخصص":
-        return evaluate_custom_api(
-            text,
-            api_key,
-            model,
-            base_url
-        )
-
+if not base_url:
     raise ValueError(
-        "مزود API غير معروف."
+        "أدخل عنوان API المخصص."
     )
 
+url = (
+    base_url.rstrip("/")
+    + "/chat/completions"
+)
+
+response = requests.post(
+
+    url,
+
+    headers={
+        "Authorization":
+            f"Bearer {api_key}",
+        "Content-Type":
+            "application/json"
+    },
+
+    json={
+        "model": model,
+
+        "messages": [
+            {
+                "role": "system",
+                "content":
+                    "أجب بالعربية وأعد JSON فقط."
+            },
+            {
+                "role": "user",
+                "content":
+                    build_prompt(text)
+            }
+        ],
+
+        "temperature": 0.1
+    },
+
+    timeout=300
+)
+
+response.raise_for_status()
+
+data = response.json()
+
+content = (
+    data["choices"][0]
+    ["message"]
+    ["content"]
+)
+
+return normalize_results(
+    parse_json(content)
+)
+```
 
 # ============================================================
-# حساب النتيجة
-# ============================================================
 
-def report(rows):
-
-    total = sum(
-        x["score"]
-        for x in rows
-    )
-
-    maximum = len(rows) * 2
-
-    if maximum == 0:
-        return 0, 0, "لا توجد معايير"
-
-    percentage = (
-        total / maximum
-    ) * 100
-
-    if percentage >= 85:
-        level = "ممتاز"
-
-    elif percentage >= 70:
-        level = "جيد جداً"
-
-    elif percentage >= 55:
-        level = "جيد"
-
-    else:
-        level = "يحتاج إلى تحسين"
-
-    return (
-        total,
-        percentage,
-        level
-    )
-
+# تنفيذ API
 
 # ============================================================
-# التقرير Markdown
-# ============================================================
 
-def markdown_report(
-    plan_name,
-    mode,
-    rows,
-    analysis
+def evaluate(
+text,
+provider,
+api_key,
+model,
+base_url=""
 ):
 
-    total, percentage, level = report(
-        rows
+```
+if not api_key:
+    raise ValueError(
+        "لم يتم إدخال مفتاح API."
     )
 
-    now = datetime.now().strftime(
-        "%Y-%m-%d %H:%M"
+if provider == "OpenAI":
+
+    return call_openai(
+        text,
+        api_key,
+        model
     )
 
-    output = [
-        "# تقرير تقييم خطة البحث العلمي",
+if provider == "Gemini":
 
-        f"**الملف:** {plan_name}",
+    return call_gemini(
+        text,
+        api_key,
+        model
+    )
 
-        f"**الوضع:** {mode}",
+if provider == "Claude":
 
-        f"**التاريخ:** {now}",
+    return call_claude(
+        text,
+        api_key,
+        model
+    )
 
-        "**نطاق التقييم:** "
-        "المعايير 12–51 و68–71 فقط.",
+if provider == "API مخصص":
 
-        "",
+    return call_custom(
+        text,
+        api_key,
+        model,
+        base_url
+    )
 
-        f"## النتيجة العامة: "
-        f"{percentage:.1f}% — "
-        f"{total}/{len(rows)*2} — "
-        f"{level}",
-
-        "",
-
-        "## التحليل الأكاديمي",
-
-        analysis,
-
-        "",
-
-        "## التقييم التفصيلي"
-    ]
-
-    for category in CATEGORIES:
-
-        output.append(
-            f"\n### {category}"
-        )
-
-        for row in rows:
-
-            if row["category"] != category:
-                continue
-
-            output.extend(
-                [
-                    f"**المعيار {row['id']}: "
-                    f"{row['criterion']}**",
-
-                    f"- الدرجة: "
-                    f"{row['score']}/2",
-
-                    f"- الحكم: "
-                    f"{row['status']}",
-
-                    f"- الدليل: "
-                    f"{row['evidence']}",
-
-                    f"- التحليل: "
-                    f"{row['explanation']}",
-
-                    f"- التوصية: "
-                    f"{row['suggestion']}",
-
-                    ""
-                ]
-            )
-
-    return "\n".join(output)
-
+raise ValueError(
+    "مزود API غير معروف."
+)
+```
 
 # ============================================================
+
+# الحساب
+
+# ============================================================
+
+def calculate(results):
+
+```
+total = sum(
+    item["score"]
+    for item in results
+)
+
+maximum = MAX_SCORE
+
+percentage = (
+    total / maximum * 100
+    if maximum
+    else 0
+)
+
+if percentage >= 85:
+    level = "ممتاز"
+
+elif percentage >= 70:
+    level = "جيد جداً"
+
+elif percentage >= 55:
+    level = "جيد"
+
+elif percentage >= 40:
+    level = "مقبول"
+
+else:
+    level = "يحتاج إلى تحسين"
+
+return (
+    total,
+    maximum,
+    percentage,
+    level
+)
+```
+
+# ============================================================
+
+# التقرير
+
+# ============================================================
+
+def build_markdown_report(
+filename,
+provider,
+results,
+analysis
+):
+
+```
+total, maximum, percentage, level = (
+    calculate(results)
+)
+
+lines = [
+
+    "# تقرير تقييم خطة البحث العلمي",
+
+    "",
+
+    f"**الملف:** {filename}",
+
+    f"**مزود الذكاء الاصطناعي:** {provider}",
+
+    f"**التاريخ:** "
+    f"{datetime.now().strftime('%Y-%m-%d %H:%M')}",
+
+    "",
+
+    "## نطاق التقييم",
+
+    "المعايير 12–51 و68–71 فقط.",
+
+    "",
+
+    "## النتيجة العامة",
+
+    f"**{percentage:.1f}% — "
+    f"{total}/{maximum} — {level}**",
+
+    "",
+
+    "## التحليل الأكاديمي",
+
+    analysis,
+
+    "",
+
+    "## التقييم التفصيلي"
+]
+
+current_category = None
+
+for item in results:
+
+    category = item["category"]
+
+    if category != current_category:
+
+        lines.extend(
+            [
+                "",
+                f"### {category}",
+                ""
+            ]
+        )
+
+        current_category = category
+
+    lines.extend(
+        [
+            f"#### المعيار {item['id']}",
+            "",
+            f"**المعيار:** {item['criterion']}",
+            "",
+            f"**الدرجة:** {item['score']}/2",
+            "",
+            f"**الحكم:** {item['status']}",
+            "",
+            f"**الدليل:** {item['evidence']}",
+            "",
+            f"**التحليل:** {item['explanation']}",
+            "",
+            f"**التوصية:** {item['suggestion']}",
+            ""
+        ]
+    )
+
+return "\n".join(lines)
+```
+
+# ============================================================
+
 # الشريط الجانبي
+
 # ============================================================
 
 with st.sidebar:
 
-    st.header(
-        "⚙️ إعدادات التقييم"
-    )
-
-    mode = st.radio(
-        "وضع التقييم",
-
-        [
-            "ذكاء اصطناعي دلالي",
-            "فحص آلي أولي"
-        ],
-
-        index=0
-    )
-
-    st.divider()
-
-    st.markdown(
-        "**المعايير المعتمدة**"
-    )
-
-    st.write(
-        "12–51 و68–71 فقط"
-    )
-
-    st.caption(
-        f"{len(CRITERIA)} معياراً"
-    )
-
-    st.divider()
-
-
-# ============================================================
-# اختيار مزود API
-# ============================================================
-
-if mode == "ذكاء اصطناعي دلالي":
-
-    provider = st.selectbox(
-        "🤖 اختر مزود الذكاء الاصطناعي",
-
-        [
-            "OpenAI",
-            "Gemini",
-            "Claude",
-            "API متوافق مخصص"
-        ]
-    )
-
-    # --------------------------------------------------------
-    # OpenAI
-    # --------------------------------------------------------
-
-    if provider == "OpenAI":
-
-        api_key = st.text_input(
-            "🔑 مفتاح OpenAI API",
-
-            value=get_secret(
-                "OPENAI_API_KEY"
-            ),
-
-            type="password"
-        )
-
-        model_options = [
-            "gpt-4.1-mini",
-            "gpt-4.1",
-            "gpt-5",
-            "نموذج آخر"
-        ]
-
-        model_choice = st.selectbox(
-            "🧠 نموذج OpenAI",
-            model_options
-        )
-
-        if model_choice == "نموذج آخر":
-
-            model = st.text_input(
-                "اسم النموذج",
-                value=get_secret(
-                    "OPENAI_MODEL",
-                    ""
-                )
-            )
-
-        else:
-            model = model_choice
-
-        base_url = (
-            "https://api.openai.com/v1"
-        )
-
-    # --------------------------------------------------------
-    # Gemini
-    # --------------------------------------------------------
-
-    elif provider == "Gemini":
-
-        api_key = st.text_input(
-            "🔑 مفتاح Gemini API",
-
-            value=get_secret(
-                "GEMINI_API_KEY"
-            ),
-
-            type="password"
-        )
-
-        model_options = [
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "نموذج آخر"
-        ]
-
-        model_choice = st.selectbox(
-            "🧠 نموذج Gemini",
-            model_options
-        )
-
-        if model_choice == "نموذج آخر":
-
-            model = st.text_input(
-                "اسم نموذج Gemini",
-                value=get_secret(
-                    "GEMINI_MODEL",
-                    ""
-                )
-            )
-
-        else:
-            model = model_choice
-
-        base_url = ""
-
-    # --------------------------------------------------------
-    # Claude
-    # --------------------------------------------------------
-
-    elif provider == "Claude":
-
-        api_key = st.text_input(
-            "🔑 مفتاح Claude API",
-
-            value=get_secret(
-                "ANTHROPIC_API_KEY"
-            ),
-
-            type="password"
-        )
-
-        model_options = [
-            "claude-sonnet-4-5",
-            "claude-opus-4-1",
-            "نموذج آخر"
-        ]
-
-        model_choice = st.selectbox(
-            "🧠 نموذج Claude",
-            model_options
-        )
-
-        if model_choice == "نموذج آخر":
-
-            model = st.text_input(
-                "اسم نموذج Claude",
-                value=get_secret(
-                    "ANTHROPIC_MODEL",
-                    ""
-                )
-            )
-
-        else:
-            model = model_choice
-
-        base_url = ""
-
-    # --------------------------------------------------------
-    # API مخصص
-    # --------------------------------------------------------
-
-    else:
-
-        api_key = st.text_input(
-            "🔑 مفتاح API",
-
-            value=get_secret(
-                "CUSTOM_API_KEY"
-            ),
-
-            type="password"
-        )
-
-        model = st.text_input(
-            "🧠 اسم النموذج",
-
-            value=get_secret(
-                "CUSTOM_API_MODEL"
-            )
-        )
-
-        base_url = st.text_input(
-            "🌐 عنوان API",
-
-            value=get_secret(
-                "CUSTOM_API_BASE_URL"
-            )
-        )
-
-        st.caption(
-            "يجب أن تكون الخدمة متوافقة "
-            "مع OpenAI Chat Completions."
-        )
-
-
-# ============================================================
-# رفع خطة البحث
-# ============================================================
-
-upload = st.file_uploader(
-
-    "📤 حمّل خطة البحث",
-
-    type=[
-        "pdf",
-        "docx",
-        "png",
-        "jpg",
-        "jpeg",
-        "webp"
-    ],
-
-    help=(
-        "يمكن رفع ملف Word أو PDF "
-        "أو صورة."
-    )
+```
+st.header(
+    "⚙️ إعدادات النظام"
 )
 
+mode = st.radio(
+    "طريقة التقييم",
+    [
+        "🤖 تقييم بالذكاء الاصطناعي",
+        "🔎 فحص أولي"
+    ]
+)
+
+st.divider()
+
+st.markdown(
+    "### 📌 نطاق التقييم"
+)
+
+st.info(
+    "المعايير 12–51 و68–71 فقط"
+)
+
+st.write(
+    f"عدد المعايير: **{len(CRITERIA)}**"
+)
+
+st.write(
+    f"الدرجة القصوى: **{MAX_SCORE}**"
+)
+```
 
 # ============================================================
+
+# اختيار API
+
+# ============================================================
+
+if mode == "🤖 تقييم بالذكاء الاصطناعي":
+
+```
+provider = st.selectbox(
+    "اختر مزود الذكاء الاصطناعي",
+    [
+        "OpenAI",
+        "Gemini",
+        "Claude",
+        "API مخصص"
+    ]
+)
+
+if provider == "OpenAI":
+
+    api_key = st.text_input(
+        "OpenAI API Key",
+        value=get_secret(
+            "OPENAI_API_KEY"
+        ),
+        type="password"
+    )
+
+    model = st.selectbox(
+        "النموذج",
+        [
+            "gpt-4.1-mini",
+            "gpt-4.1",
+            "gpt-5"
+        ]
+    )
+
+    base_url = ""
+
+elif provider == "Gemini":
+
+    api_key = st.text_input(
+        "Gemini API Key",
+        value=get_secret(
+            "GEMINI_API_KEY"
+        ),
+        type="password"
+    )
+
+    model = st.selectbox(
+        "النموذج",
+        [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro"
+        ]
+    )
+
+    base_url = ""
+
+elif provider == "Claude":
+
+    api_key = st.text_input(
+        "Claude API Key",
+        value=get_secret(
+            "ANTHROPIC_API_KEY"
+        ),
+        type="password"
+    )
+
+    model = st.selectbox(
+        "النموذج",
+        [
+            "claude-sonnet-4-5",
+            "claude-opus-4-1"
+        ]
+    )
+
+    base_url = ""
+
+else:
+
+    api_key = st.text_input(
+        "API Key",
+        value=get_secret(
+            "CUSTOM_API_KEY"
+        ),
+        type="password"
+    )
+
+    model = st.text_input(
+        "اسم النموذج",
+        value=get_secret(
+            "CUSTOM_API_MODEL"
+        )
+    )
+
+    base_url = st.text_input(
+        "عنوان API",
+        value=get_secret(
+            "CUSTOM_API_BASE_URL"
+        )
+    )
+```
+
+else:
+
+```
+provider = "فحص أولي"
+api_key = ""
+model = ""
+base_url = ""
+```
+
+# ============================================================
+
+# رفع الملف
+
+# ============================================================
+
+uploaded_file = st.file_uploader(
+"📤 ارفع خطة البحث",
+type=[
+"pdf",
+"docx",
+"png",
+"jpg",
+"jpeg",
+"webp"
+]
+)
+
+# ============================================================
+
 # معالجة الملف
+
 # ============================================================
 
-if upload:
+if uploaded_file:
 
-    with st.spinner(
-        "جارٍ استخراج النص..."
-    ):
+```
+with st.spinner(
+    "جارٍ استخراج النص من الملف..."
+):
 
-        try:
+    try:
 
-            text, extraction_mode = (
-                extract_upload(upload)
-            )
+        extracted_text, extraction_method = (
+            extract_file(uploaded_file)
+        )
 
-        except Exception as exc:
-
-            st.error(
-                f"تعذر استخراج النص: {exc}"
-            )
-
-            st.stop()
-
-    if not text.strip():
+    except Exception as error:
 
         st.error(
-            "لم يتم العثور على نص قابل للتحليل."
+            f"حدث خطأ أثناء قراءة الملف: {error}"
         )
 
         st.stop()
 
-    st.success(
-        f"تمت المعالجة: {upload.name} — "
-        f"{extraction_mode} — "
-        f"{len(text):,} حرف"
+if not extracted_text:
+
+    st.error(
+        "لم يتم استخراج أي نص من الملف."
     )
 
-    with st.expander(
-        "🔎 معاينة النص المستخرج"
-    ):
+    st.stop()
 
-        st.text_area(
-            "النص",
-            text,
-            height=300,
-            label_visibility="collapsed"
+st.success(
+    f"تم استخراج النص بنجاح "
+    f"({extraction_method}) — "
+    f"{len(extracted_text):,} حرف."
+)
+
+with st.expander(
+    "👁️ معاينة النص المستخرج"
+):
+
+    st.text_area(
+        "النص",
+        extracted_text,
+        height=300,
+        label_visibility="collapsed"
+    )
+
+
+# ========================================================
+# زر التقييم
+# ========================================================
+
+if st.button(
+    "🚀 ابدأ تقييم خطة البحث",
+    type="primary",
+    use_container_width=True
+):
+
+    try:
+
+        if mode == "🤖 تقييم بالذكاء الاصطناعي":
+
+            with st.spinner(
+                f"جارٍ التقييم باستخدام {provider}..."
+            ):
+
+                results, analysis = evaluate(
+                    extracted_text,
+                    provider,
+                    api_key,
+                    model,
+                    base_url
+                )
+
+        else:
+
+            # --------------------------------------------
+            # الفحص الأولي
+            # --------------------------------------------
+
+            results = []
+
+            text_lower = extracted_text.lower()
+
+            for number, category, criterion in CRITERIA:
+
+                score = 0
+
+                keywords = [
+                    "عنوان",
+                    "مقدمة",
+                    "مشكلة",
+                    "سؤال",
+                    "تساؤل",
+                    "فرض",
+                    "أهمية",
+                    "هدف",
+                    "مصطلح",
+                    "حدود",
+                    "منهج",
+                    "دراسة",
+                    "بحث",
+                    "لغة"
+                ]
+
+                hits = sum(
+                    1
+                    for keyword in keywords
+                    if keyword in text_lower
+                )
+
+                if hits >= 6:
+                    score = 2
+
+                elif hits >= 2:
+                    score = 1
+
+                results.append(
+                    {
+                        "id": number,
+                        "category": category,
+                        "criterion": criterion,
+                        "score": score,
+                        "status": [
+                            "غير متحقق",
+                            "متحقق جزئياً",
+                            "متحقق"
+                        ][score],
+                        "evidence":
+                            "نتيجة فحص أولي آلي.",
+                        "explanation":
+                            "الفحص الأولي يعتمد "
+                            "على مؤشرات لغوية ولا "
+                            "يمثل تحليلاً دلالياً كاملاً.",
+                        "suggestion":
+                            "ينصح باستخدام التقييم "
+                            "بالذكاء الاصطناعي للحصول "
+                            "على تحليل أكاديمي أدق."
+                    }
+                )
+
+            analysis = (
+                "هذه نتيجة فحص أولي آلي. "
+                "لا ينبغي اعتمادها كتقييم أكاديمي "
+                "نهائي، لأن التقييم الدلالي يحتاج "
+                "إلى قراءة السياق والعلاقات بين "
+                "عناصر خطة البحث."
+            )
+
+
+        # --------------------------------------------
+        # حفظ النتائج
+        # --------------------------------------------
+
+        st.session_state["results"] = results
+        st.session_state["analysis"] = analysis
+        st.session_state["filename"] = uploaded_file.name
+        st.session_state["provider"] = provider
+
+        st.success(
+            "✅ اكتمل تقييم خطة البحث."
         )
 
+    except Exception as error:
 
-    # ========================================================
-    # زر التقييم
-    # ========================================================
+        st.error(
+            f"حدث خطأ أثناء التقييم: {error}"
+        )
 
-    if st.button(
-        "🚀 ابدأ التقييم الأكاديمي",
-        type="primary",
-        use_container_width=True
-    ):
+        with st.expander(
+            "تفاصيل الخطأ"
+        ):
 
-        try:
+            st.exception(error)
+```
 
-            # ------------------------------------------------
-            # الذكاء الاصطناعي
-            # ------------------------------------------------
+# ============================================================
 
-            if mode == "ذكاء اصطناعي دلالي":
+# عرض النتائج
 
-                if not api_key:
+# ============================================================
 
-                    st.error(
-                        "أدخل مفتاح API."
-                    )
+if "results" in st.session_state:
 
-                    st.stop()
+```
+results = st.session_state["results"]
+analysis = st.session_state["analysis"]
 
-                with st.spinner(
-                    "يجري تحليل خطة البحث "
-                    "معياراً معياراً..."
-                ):
+total, maximum, percentage, level = calculate(
+    results
+)
 
-                    rows, analysis = evaluate_ai(
-                        text,
-                        provider,
-                        api_key,
-                        model,
-                        base_url
-                    )
+st.divider()
 
-            # ------------------------------------------------
-            # الفحص الأولي
-            # ------------------------------------------------
+# ========================================================
+# النتائج الأساسية
+# ========================================================
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "النتيجة",
+    f"{percentage:.1f}%"
+)
+
+col2.metric(
+    "النقاط",
+    f"{total}/{maximum}"
+)
+
+col3.metric(
+    "التقدير",
+    level
+)
+
+col4.metric(
+    "المعايير",
+    len(results)
+)
+
+st.progress(
+    percentage / 100
+)
+
+
+# ========================================================
+# التحليل العام
+# ========================================================
+
+st.subheader(
+    "📝 التحليل الأكاديمي العام"
+)
+
+st.markdown(
+    f"""
+    <div class="result-card">
+    {analysis.replace(chr(10), "<br>")}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ========================================================
+# النتائج حسب المحاور
+# ========================================================
+
+st.subheader(
+    "📊 النتائج حسب المحاور"
+)
+
+summary = []
+
+for category, category_items in CATEGORIES.items():
+
+    category_results = [
+        result
+        for result in results
+        if result["category"] == category
+    ]
+
+    score = sum(
+        result["score"]
+        for result in category_results
+    )
+
+    maximum_category = (
+        len(category_items) * 2
+    )
+
+    percentage_category = (
+        score / maximum_category * 100
+        if maximum_category
+        else 0
+    )
+
+    summary.append(
+        {
+            "المحور":
+                category,
+
+            "عدد المعايير":
+                len(category_items),
+
+            "النقاط":
+                f"{score}/{maximum_category}",
+
+            "النسبة":
+                f"{percentage_category:.1f}%"
+        }
+    )
+
+st.dataframe(
+    summary,
+    use_container_width=True,
+    hide_index=True
+)
+
+
+# ========================================================
+# التقييم التفصيلي
+# ========================================================
+
+st.subheader(
+    "🧾 التقييم التفصيلي"
+)
+
+for category in CATEGORIES:
+
+    st.markdown(
+        f"### {category}"
+    )
+
+    category_results = [
+        result
+        for result in results
+        if result["category"] == category
+    ]
+
+    for result in category_results:
+
+        score = result["score"]
+
+        icon = [
+            "🔴",
+            "🟠",
+            "🟢"
+        ][score]
+
+        with st.expander(
+            f"{icon} المعيار {result['id']} — "
+            f"{result['criterion']} "
+            f"— {result['score']}/2"
+        ):
+
+            st.write(
+                f"**الحكم:** {result['status']}"
+            )
+
+            st.markdown(
+                "**📌 الدليل من الخطة:**"
+            )
+
+            st.info(
+                result["evidence"]
+            )
+
+            st.markdown(
+                "**🔎 التحليل الأكاديمي:**"
+            )
+
+            st.write(
+                result["explanation"]
+            )
+
+            st.markdown(
+                "**💡 التوصية:**"
+            )
+
+            if result["suggestion"]:
+
+                st.warning(
+                    result["suggestion"]
+                )
 
             else:
 
-                st.warning(
-                    "الفحص الآلي الأولي "
-                    "ليس بديلاً عن التحليل الدلالي."
-                )
-
-                rows = []
-
-                for n, category, criterion in CRITERIA:
-
-                    all_text = text.lower()
-
-                    score = 0
-
-                    keywords = {
-                        12: [
-                            "عنوان",
-                            "موضوع"
-                        ],
-
-                        13: [
-                            "عنوان"
-                        ],
-
-                        14: [
-                            "أثر",
-                            "دور",
-                            "علاقة",
-                            "تأثير"
-                        ],
-
-                        20: [
-                            "مشكلة",
-                            "إشكالية"
-                        ],
-
-                        24: [
-                            "سؤال",
-                            "تساؤل"
-                        ],
-
-                        28: [
-                            "فرض",
-                            "فرضية"
-                        ],
-
-                        32: [
-                            "أهمية"
-                        ],
-
-                        36: [
-                            "هدف",
-                            "أهداف"
-                        ],
-
-                        40: [
-                            "مصطلحات",
-                            "تعريف"
-                        ],
-
-                        44: [
-                            "حدود"
-                        ],
-
-                        48: [
-                            "منهج"
-                        ],
-
-                        68: [
-                            "دراسة",
-                            "بحث"
-                        ],
-
-                        69: [
-                            "دراسة",
-                            "بحث"
-                        ],
-
-                        70: [
-                            "دراسة",
-                            "بحث"
-                        ],
-
-                        71: [
-                            "دراسة",
-                            "بحث"
-                        ]
-                    }
-
-                    keys = keywords.get(
-                        n,
-                        []
-                    )
-
-                    hits = sum(
-                        1
-                        for key in keys
-                        if key in all_text
-                    )
-
-                    if hits >= 2:
-                        score = 2
-
-                    elif hits == 1:
-                        score = 1
-
-                    rows.append(
-                        {
-                            "id": n,
-                            "category": category,
-                            "criterion": criterion,
-                            "score": score,
-                            "status": [
-                                "غير متحقق",
-                                "متحقق جزئياً",
-                                "متحقق"
-                            ][score],
-
-                            "evidence":
-                                "فحص آلي أولي "
-                                "بالاعتماد على "
-                                "مؤشرات لغوية.",
-
-                            "explanation":
-                                "هذه نتيجة أولية "
-                                "ولا تمثل تحكيماً "
-                                "أكاديمياً دلالياً.",
-
-                            "suggestion":
-                                "استخدم الذكاء "
-                                "الاصطناعي الدلالي "
-                                "لتحليل المعيار "
-                                "بشكل أعمق."
-                        }
-                    )
-
-                total, percentage, level = report(
-                    rows
-                )
-
-                analysis = (
-                    f"أظهر الفحص الأولي "
-                    f"نتيجة قدرها "
-                    f"{percentage:.1f}% "
-                    f"({total}/{len(rows)*2}). "
-                    "هذه النتيجة إرشادية فقط، "
-                    "ولا تغني عن التحليل الدلالي "
-                    "للنص."
+                st.success(
+                    "لا توجد توصية إضافية؛ "
+                    "المعيار متحقق."
                 )
 
 
-            # =================================================
-            # حفظ النتيجة
-            # =================================================
+# ========================================================
+# المعايير التي تحتاج إلى تحسين
+# ========================================================
 
-            st.session_state["rows"] = rows
+st.subheader(
+    "🎯 المعايير التي تحتاج إلى تحسين"
+)
 
-            st.session_state[
-                "analysis"
-            ] = analysis
+weak_results = [
+    result
+    for result in results
+    if result["score"] < 2
+]
 
-            st.session_state[
-                "plan_name"
-            ] = upload.name
+if weak_results:
 
-            st.session_state[
-                "text"
-            ] = text
-
-            st.session_state[
-                "mode"
-            ] = mode
-
-            st.session_state[
-                "provider"
-            ] = provider if mode == (
-                "ذكاء اصطناعي دلالي"
-            ) else ""
-
-            st.success(
-                "✅ اكتمل التقييم بنجاح."
-            )
-
-        except Exception as exc:
-
-            st.error(
-                f"تعذر إكمال التقييم: {exc}"
-            )
-
-            with st.expander(
-                "تفاصيل الخطأ"
-            ):
-                st.exception(exc)
-
-
-# ============================================================
-# عرض النتائج
-# ============================================================
-
-if "rows" in st.session_state:
-
-    rows = st.session_state[
-        "rows"
-    ]
-
-    analysis = st.session_state.get(
-        "analysis",
-        ""
-    )
-
-    total, percentage, level = report(
-        rows
-    )
-
-
-    # ========================================================
-    # النتائج الرئيسية
-    # ========================================================
-
-    st.divider()
-
-    col1, col2, col3, col4 = (
-        st.columns(4)
-    )
-
-    col1.metric(
-        "النتيجة",
-        f"{percentage:.1f}%"
-    )
-
-    col2.metric(
-        "النقاط",
-        f"{total}/{len(rows)*2}"
-    )
-
-    col3.metric(
-        "التقدير",
-        level
-    )
-
-    col4.metric(
-        "عدد المعايير",
-        len(rows)
-    )
-
-    st.progress(
-        percentage / 100
-    )
-
-
-    # ========================================================
-    # التحليل الأكاديمي
-    # ========================================================
-
-    st.subheader(
-        "📝 التحليل الأكاديمي المكتوب"
-    )
-
-    st.markdown(
-        f"""
-        <div class="card">
-        {analysis.replace(chr(10), "<br>")}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-    # ========================================================
-    # النتائج حسب المحور
-    # ========================================================
-
-    st.subheader(
-        "📊 النتيجة حسب المحور"
-    )
-
-    summary = []
-
-    for category in CATEGORIES:
-
-        category_rows = [
-            row
-            for row in rows
-            if row["category"] == category
-        ]
-
-        score = sum(
-            row["score"]
-            for row in category_rows
-        )
-
-        maximum = (
-            len(category_rows) * 2
-        )
-
-        percentage_category = (
-            score / maximum * 100
-            if maximum
-            else 0
-        )
-
-        summary.append(
-            {
-                "المحور":
-                    category,
-
-                "عدد المعايير":
-                    len(category_rows),
-
-                "النقاط":
-                    f"{score}/{maximum}",
-
-                "النسبة":
-                    f"{percentage_category:.1f}%"
-            }
-        )
-
-    st.dataframe(
-        summary,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-    # ========================================================
-    # التقييم التفصيلي
-    # ========================================================
-
-    st.subheader(
-        "🧾 التقييم التفصيلي"
-    )
-
-    for category in CATEGORIES:
+    for result in weak_results:
 
         st.markdown(
-            f"### {category}"
-        )
-
-        category_rows = [
-            row
-            for row in rows
-            if row["category"] == category
-        ]
-
-        for row in category_rows:
-
-            icon = [
-                "🔴",
-                "🟠",
-                "🟢"
-            ][row["score"]]
-
-            with st.expander(
-                f"{icon} المعيار "
-                f"{row['id']}: "
-                f"{row['criterion']} "
-                f"— {row['status']}"
-            ):
-
-                st.write(
-                    "**الدرجة:**",
-                    f"{row['score']}/2"
-                )
-
-                st.write(
-                    "**الدليل من الخطة:**"
-                )
-
-                st.info(
-                    row.get(
-                        "evidence",
-                        "لا يوجد دليل"
-                    )
-                )
-
-                st.write(
-                    "**التحليل الأكاديمي:**"
-                )
-
-                st.write(
-                    row.get(
-                        "explanation",
-                        ""
-                    )
-                )
-
-                if row.get(
-                    "suggestion"
-                ):
-
-                    st.write(
-                        "**التوصية:**"
-                    )
-
-                    st.warning(
-                        row["suggestion"]
-                    )
-
-
-    # ========================================================
-    # الأولويات
-    # ========================================================
-
-    st.subheader(
-        "🎯 الأولويات التي تحتاج إلى تحسين"
-    )
-
-    weak = [
-        row
-        for row in rows
-        if row["score"] < 2
-    ]
-
-    if weak:
-
-        for row in weak:
-
-            st.markdown(
-                f"""
-                - **المعيار {row['id']} — "
-                f"{row['criterion']}**: "
-                f"{row.get('suggestion', 'يحتاج إلى مراجعة.')}"
-                """
-            )
-
-    else:
-
-        st.success(
-            "🎉 لم تظهر معايير بحاجة إلى تحسين "
-            "ضمن نطاق التقييم المحدد."
-        )
-
-
-    # ========================================================
-    # إنشاء الملفات
-    # ========================================================
-
-    markdown = markdown_report(
-        st.session_state.get(
-            "plan_name",
-            "خطة البحث"
-        ),
-
-        st.session_state.get(
-            "mode",
-            ""
-        ),
-
-        rows,
-
-        analysis
-    )
-
-    json_report = {
-
-        "plan":
-            st.session_state.get(
-                "plan_name"
-            ),
-
-        "mode":
-            st.session_state.get(
-                "mode"
-            ),
-
-        "provider":
-            st.session_state.get(
-                "provider",
-                ""
-            ),
-
-        "criteria_scope":
-            "12–51 و68–71 فقط",
-
-        "criteria_count":
-            len(rows),
-
-        "total":
-            total,
-
-        "max_score":
-            len(rows) * 2,
-
-        "percentage":
-            percentage,
-
-        "level":
-            level,
-
-        "overall_analysis":
-            analysis,
-
-        "results":
-            rows
-    }
-
-
-    # ========================================================
-    # أزرار التحميل
-    # ========================================================
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.download_button(
-            "⬇️ تنزيل التقرير JSON",
-
-            json.dumps(
-                json_report,
-                ensure_ascii=False,
-                indent=2
-            ),
-
-            "تقرير_تقييم_خطة_البحث.json",
-
-            "application/json",
-
-            use_container_width=True
-        )
-
-    with col2:
-
-        st.download_button(
-            "⬇️ تنزيل التقرير Markdown",
-
-            markdown,
-
-            "تقرير_تقييم_خطة_البحث.md",
-
-            "text/markdown",
-
-            use_container_width=True
+            f"**{result['id']}. "
+            f"{result['criterion']}** — "
+            f"{result['suggestion']}"
         )
 
 else:
 
-    st.info(
-        "📤 حمّل خطة البحث ثم اضغط "
-        "«ابدأ التقييم الأكاديمي»."
+    st.success(
+        "🎉 جميع المعايير حصلت على الدرجة الكاملة."
     )
-````
+
+
+# ========================================================
+# إعداد التقرير
+# ========================================================
+
+markdown_report = build_markdown_report(
+    st.session_state["filename"],
+    st.session_state["provider"],
+    results,
+    analysis
+)
+
+json_report = {
+    "filename":
+        st.session_state["filename"],
+
+    "provider":
+        st.session_state["provider"],
+
+    "evaluation_scope":
+        "12–51 و68–71 فقط",
+
+    "criteria_count":
+        len(results),
+
+    "total_score":
+        total,
+
+    "maximum_score":
+        maximum,
+
+    "percentage":
+        percentage,
+
+    "level":
+        level,
+
+    "overall_analysis":
+        analysis,
+
+    "results":
+        results
+}
+
+
+# ========================================================
+# التحميل
+# ========================================================
+
+st.subheader(
+    "📥 حفظ التقرير"
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    st.download_button(
+        "⬇️ تنزيل JSON",
+
+        data=json.dumps(
+            json_report,
+            ensure_ascii=False,
+            indent=2
+        ),
+
+        file_name=
+            "تقرير_تقييم_خطة_البحث.json",
+
+        mime="application/json",
+
+        use_container_width=True
+    )
+
+with col2:
+
+    st.download_button(
+        "⬇️ تنزيل Markdown",
+
+        data=markdown_report,
+
+        file_name=
+            "تقرير_تقييم_خطة_البحث.md",
+
+        mime="text/markdown",
+
+        use_container_width=True
+    )
+```
+
+else:
+
+```
+st.info(
+    "📤 ارفع خطة البحث للبدء في التقييم."
+)
+```
