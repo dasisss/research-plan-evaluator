@@ -1322,8 +1322,8 @@ if mode == "🤖 تقييم بالذكاء الاصطناعي":
             "النموذج",
 
             [
-                "claude-sonnet-4-5",
-                "claude-opus-4-1"
+        "claude-opus-4-8",
+        "claude-sonnet-4-5"
             ]
         )
 
