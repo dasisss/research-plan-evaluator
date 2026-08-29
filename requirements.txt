@@ -1,9 +1,9 @@
 streamlit
+requests
 python-docx
 PyMuPDF
 Pillow
 numpy
 opencv-python-headless
-requests
-paddlepaddle==3.2.0
-paddleocr[all]
+paddleocr
+paddlepaddle
