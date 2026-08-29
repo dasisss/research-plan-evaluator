@@ -1,0 +1,10 @@
+streamlit>=1.40
+requests
+python-docx
+PyMuPDF
+Pillow
+numpy>=1.24,<2.4
+paddlepaddle==3.2.0
+paddleocr>=3.2,<3.8
+# ملاحظة: opencv-contrib-python (4.10.0.84) يُثبَّت تلقائياً مع paddlex؛
+# لا تُضف opencv-python-headless لأنه يتعارض معه داخل حزمة cv2.
