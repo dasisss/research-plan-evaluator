@@ -105,7 +105,6 @@ initial_sidebar_state="expanded",
 st.markdown(
 """ <style>
 
-```
 .block-container {
     direction: rtl;
     max-width: 1450px;
@@ -147,8 +146,6 @@ st.markdown(
 </style>
 """,
 unsafe_allow_html=True,
-```
-
 )
 
 # ============================================================
@@ -160,7 +157,6 @@ unsafe_allow_html=True,
 st.markdown(
 """ <div class="hero"> <h1>📚 مقيّم خطة البحث العلمي</h1>
 
-```
     <p>
     تقييم أكاديمي لخطة البحث باستخدام المعايير
     من 12 إلى 51 ومن 68 إلى 71 فقط،
@@ -170,7 +166,6 @@ st.markdown(
 </div>
 """,
 unsafe_allow_html=True,
-```
 
 )
 
@@ -185,7 +180,6 @@ name,
 default=""
 ):
 
-```
 try:
 
     if name in st.secrets:
@@ -202,7 +196,6 @@ return os.getenv(
     name,
     default
 )
-```
 
 # ============================================================
 
@@ -212,7 +205,6 @@ return os.getenv(
 
 def clean_text(text):
 
-```
 if not text:
 
     return ""
@@ -245,7 +237,6 @@ text = re.sub(
 )
 
 return text.strip()
-```
 
 # ============================================================
 
@@ -258,7 +249,6 @@ show_spinner=False
 )
 def extract_docx(data):
 
-```
 from docx import Document
 
 document = Document(
@@ -301,7 +291,6 @@ for table in document.tables:
 return clean_text(
     "\n".join(parts)
 )
-```
 
 # ============================================================
 
@@ -314,7 +303,6 @@ show_spinner=False
 )
 def extract_pdf_text(data):
 
-```
 import fitz
 
 document = fitz.open(
@@ -341,7 +329,6 @@ document.close()
 return clean_text(
     "\n".join(pages)
 )
-```
 
 # ============================================================
 
@@ -354,7 +341,6 @@ show_spinner="جاري تحميل نموذج OCR العربي لأول مرة...
 )
 def load_arabic_ocr():
 
-```
 from paddleocr import PaddleOCR
 
 ocr = PaddleOCR(
@@ -365,7 +351,6 @@ ocr = PaddleOCR(
 )
 
 return ocr
-```
 
 # ============================================================
 
@@ -377,7 +362,6 @@ def preprocess_image(
 image
 ):
 
-```
 import cv2
 import numpy as np
 
@@ -459,8 +443,6 @@ image = cv2.cvtColor(
 )
 
 return image
-```
-
 # ============================================================
 
 # استخراج النص من نتيجة PaddleOCR
@@ -471,7 +453,6 @@ def extract_paddle_result_text(
 result
 ):
 
-```
 lines = []
 
 for res in result:
@@ -555,7 +536,6 @@ for res in result:
             )
 
 return lines
-```
 
 # ============================================================
 
@@ -567,7 +547,6 @@ def extract_image_paddle(
 data
 ):
 
-```
 from PIL import Image
 
 image = Image.open(
@@ -593,7 +572,6 @@ lines = (
 return clean_text(
     "\n".join(lines)
 )
-```
 
 # ============================================================
 
@@ -605,7 +583,6 @@ def extract_pdf_paddle(
 data
 ):
 
-```
 import fitz
 from PIL import Image
 
@@ -690,7 +667,6 @@ return clean_text(
         pages
     )
 )
-```
 
 # ============================================================
 
@@ -702,7 +678,6 @@ def extract_file(
 uploaded_file
 ):
 
-```
 data = (
     uploaded_file
     .getvalue()
@@ -774,7 +749,6 @@ if filename.endswith(
 raise ValueError(
     "نوع الملف غير مدعوم."
 )
-```
 
 # ============================================================
 
@@ -786,7 +760,6 @@ def find_title(
 text
 ):
 
-```
 lines = [
     line.strip()
     for line in text.splitlines()
@@ -825,7 +798,6 @@ if lines:
     return lines[0]
 
 return "غير محدد"
-```
 
 # ============================================================
 
@@ -837,7 +809,6 @@ def get_introduction(
 text
 ):
 
-```
 lines = [
     line.strip()
     for line in text.splitlines()
@@ -905,7 +876,6 @@ for line in lines[start:]:
 return " ".join(
     result
 )[:9000]
-```
 
 # ============================================================
 
@@ -915,13 +885,11 @@ return " ".join(
 
 def criteria_for_prompt():
 
-```
 return "\n".join(
     f"{number}. {category}: {criterion}"
     for number, category, criterion
     in CRITERIA
 )
-```
 
 # ============================================================
 
@@ -933,9 +901,7 @@ def build_prompt(
 text
 ):
 
-```
 return f"""
-```
 
 أنت أستاذ جامعي ومحكّم متخصص في مناهج البحث العلمي.
 
@@ -1076,7 +1042,6 @@ def parse_json(
 text
 ):
 
-````
 text = text.strip()
 
 text = re.sub(
@@ -1128,7 +1093,6 @@ except Exception:
             start:end + 1
         ]
     )
-````
 
 # ============================================================
 
@@ -1140,7 +1104,6 @@ def normalize_results(
 data
 ):
 
-```
 allowed = {
     item[0]: item
     for item in CRITERIA
