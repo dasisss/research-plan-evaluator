@@ -3,7 +3,3 @@ requests
 python-docx
 PyMuPDF
 Pillow
-numpy
-opencv-python-headless
-paddlepaddle==3.2.0
-paddleocr
