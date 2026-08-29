@@ -185,102 +185,84 @@ def extract_pdf(data):
     )
 
 
-# ============================================================
-# OCR للصور
-# ============================================================
+def extract_file(uploaded_file):
 
-@st.cache_data(show_spinner=False)
-def extract_image(data):
+    data = uploaded_file.getvalue()
 
-    from PIL import Image
-    import pytesseract
-
-    image = Image.open(
-        io.BytesIO(data)
+    filename = (
+        uploaded_file.name
+        .lower()
     )
 
-    try:
+    # ==========================================
+    # Word
+    # ==========================================
 
-        languages = pytesseract.get_languages(
-            config=""
+    if filename.endswith(
+        ".docx"
+    ):
+
+        return (
+            extract_docx(data),
+            "Word — استخراج النص الأصلي"
         )
 
-        language = (
-            "ara+eng"
-            if "ara" in languages
-            else "eng"
+    # ==========================================
+    # PDF
+    # ==========================================
+
+    if filename.endswith(
+        ".pdf"
+    ):
+
+        text = extract_pdf(
+            data
         )
 
-    except Exception:
-
-        language = "eng"
-
-    text = pytesseract.image_to_string(
-        image,
-        lang=language,
-        config="--psm 6"
-    )
-
-    return clean_text(text)
-
-
-# ============================================================
-# OCR للـ PDF المصور
-# ============================================================
-
-@st.cache_data(show_spinner=False)
-def extract_pdf_ocr(data):
-
-    import fitz
-    from PIL import Image
-    import pytesseract
-
-    document = fitz.open(
-        stream=data,
-        filetype="pdf"
-    )
-
-    try:
-
-        languages = pytesseract.get_languages(
-            config=""
+        compact = re.sub(
+            r"\s",
+            "",
+            text
         )
 
-        language = (
-            "ara+eng"
-            if "ara" in languages
-            else "eng"
-        )
+        # PDF نصي
+        if len(compact) >= 500:
 
-    except Exception:
-
-        language = "eng"
-
-    pages = []
-
-    for page in document:
-
-        pixmap = page.get_pixmap(
-            matrix=fitz.Matrix(2, 2),
-            alpha=False
-        )
-
-        image = Image.open(
-            io.BytesIO(
-                pixmap.tobytes("png")
+            return (
+                text,
+                "PDF — استخراج النص الأصلي"
             )
+
+        # PDF ممسوح
+        return (
+            extract_pdf_paddle(
+                data
+            ),
+            "PDF ممسوح — PaddleOCR عربي"
         )
 
-        pages.append(
-            pytesseract.image_to_string(
-                image,
-                lang=language,
-                config="--psm 6"
-            )
+    # ==========================================
+    # الصور
+    # ==========================================
+
+    if filename.endswith(
+        (
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp"
+        )
+    ):
+
+        return (
+            extract_image_paddle(
+                data
+            ),
+            "صورة — PaddleOCR عربي"
         )
 
-    return clean_text(
-        "\n".join(pages)
+    raise ValueError(
+        "نوع الملف غير مدعوم."
     )
 
 
